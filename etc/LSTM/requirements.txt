@@ -1,0 +1,17 @@
+-i https://pypi.org/simple
+Flask
+Flask-Bootstrap
+Flask-Uploads
+numpy
+opencv-python-headless
+matplotlib
+pandas
+datasets
+pyyaml
+Werkzeug
+pytorch_lightning
+torch
+torchvision
+torchaudio
+torchmetrics
+torchtext

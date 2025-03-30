@@ -1,0 +1,369 @@
+services:
+  # Database
+  redis:
+    image: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data # Persist Redis data to the host
+    networks:
+      - service-networks
+  
+  db:
+    container_name: "db"
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: stc
+      POSTGRES_PASSWORD: Stc@2024
+      POSTGRES_DB: cameradb
+      # POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/:/var/lib/postgresql/data/
+    networks:
+      - service-networks
+
+  #Worker
+  cameraworker_1:
+    build:
+      context: ./build/camera_worker
+      dockerfile: WorkerDockerfileGPU
+    container_name: cameraworker_1
+    image: xxtkidxx/cameraworker:lastest
+    restart: always
+    environment:
+      - WORKER_ID=1
+    depends_on:
+      - redis
+    volumes:
+      - ./build/camera_worker:/app
+      - ./frames/:/app/frames
+    command: sh -c "cd /app && python app.py"
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, video]
+    networks:
+      - service-networks
+
+  # cameraworker_2:
+  #   build:
+  #     context: ./build/camera_worker
+  #     dockerfile: WorkerDockerfileGPU
+  #   container_name: cameraworker_2
+  #   image: xxtkidxx/cameraworker:lastest
+  #   restart: always
+  #   environment:
+  #     - WORKER_ID=2
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./build/camera_worker:/app
+  #     - ./frames/:/app/frames
+  #   command: sh -c "cd /app && python app.py"
+  #   stdin_open: true
+  #   tty: true
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu, video]
+  #   networks:
+  #     - service-networks
+
+  # cameraworker_3:
+  #   build:
+  #     context: ./build/camera_worker
+  #     dockerfile: WorkerDockerfileGPU
+  #   container_name: cameraworker_3
+  #   image: xxtkidxx/cameraworker:lastest
+  #   restart: always
+  #   environment:
+  #     - WORKER_ID=3
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./build/camera_worker:/app
+  #     - ./frames/:/app/frames
+  #   command: sh -c "cd /app && python app.py"
+  #   stdin_open: true
+  #   tty: true
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu, video]
+  #   networks:
+  #     - service-networks
+
+  # cameraworker_4:
+  #   build:
+  #     context: ./build/camera_worker
+  #     dockerfile: WorkerDockerfileGPU
+  #   container_name: cameraworker_4
+  #   image: xxtkidxx/cameraworker:lastest
+  #   restart: always
+  #   environment:
+  #     - WORKER_ID=4
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./build/camera_worker:/app
+  #     - ./frames/:/app/frames
+  #   command: sh -c "cd /app && python app.py"
+  #   stdin_open: true
+  #   tty: true
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu, video]
+  #   networks:
+  #     - service-networks
+
+  # cameraworker_5:
+  #   build:
+  #     context: ./build/camera_worker
+  #     dockerfile: WorkerDockerfileGPU
+  #   container_name: cameraworker_5
+  #   image: xxtkidxx/cameraworker:lastest
+  #   restart: always
+  #   environment:
+  #     - WORKER_ID=5
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./build/camera_worker:/app
+  #     - ./frames/:/app/frames
+  #   command: sh -c "cd /app && python app.py"
+  #   stdin_open: true
+  #   tty: true
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu, video]
+  #   networks:
+  #     - service-networks
+
+  # cameraworker_6:
+  #   build:
+  #     context: ./build/camera_worker
+  #     dockerfile: WorkerDockerfileGPU
+  #   container_name: cameraworker_6
+  #   image: xxtkidxx/cameraworker:lastest
+  #   restart: always
+  #   environment:
+  #     - WORKER_ID=6
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./build/camera_worker:/app
+  #     - ./frames/:/app/frames
+  #   command: sh -c "cd /app && python app.py"
+  #   stdin_open: true
+  #   tty: true
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu, video]
+  #   networks:
+  #     - service-networks
+
+  # cameraworker_7:
+  #   build:
+  #     context: ./build/camera_worker
+  #     dockerfile: WorkerDockerfileGPU
+  #   container_name: cameraworker_7
+  #   image: xxtkidxx/cameraworker:lastest
+  #   restart: always
+  #   environment:
+  #     - WORKER_ID=7
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./build/camera_worker:/app
+  #     - ./frames/:/app/frames
+  #   command: sh -c "cd /app && python app.py"
+  #   stdin_open: true
+  #   tty: true
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu, video]
+  #   networks:
+  #     - service-networks
+
+  # cameraworker_8:
+  #   build:
+  #     context: ./build/camera_worker
+  #     dockerfile: WorkerDockerfileGPU
+  #   container_name: cameraworker_8
+  #   image: xxtkidxx/cameraworker:lastest
+  #   restart: always
+  #   environment:
+  #     - WORKER_ID=8
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./build/camera_worker:/app
+  #     - ./frames/:/app/frames
+  #   command: sh -c "cd /app && python app.py"
+  #   stdin_open: true
+  #   tty: true
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu, video]
+  #   networks:
+  #     - service-networks
+
+  # Web    
+  cameraweb:
+    container_name: cameraweb
+    image: xxtkidxx/cameraweb:latest
+    build:
+      context: ./web
+      dockerfile: WebDockerfile
+    restart: always
+    ports:
+      - "8080:80"
+    tty: true
+    depends_on:
+      - db
+      - redis
+    # working_dir: /var/www/html
+    volumes:
+      - ./web:/var/www/html
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - service-networks
+
+  camerawebreverb:
+    container_name: camerawebreverb
+    image: xxtkidxx/cameraweb:latest
+    # volumes:
+    #   - ./web:/var/www/html
+    restart: always
+    ports:
+      - "6001:6001"
+    command: php artisan reverb:start --port=6001  
+    networks:
+      - service-networks
+
+  camerawebworkers:
+    container_name: camerawebworkers
+    image: xxtkidxx/cameraweb:latest
+    # volumes:
+    #   - ./web:/var/www/html
+    command: php artisan queue:work
+    restart: always
+    networks:
+      - service-networks
+
+  camerawebscheduler:
+    container_name: camerawebscheduler
+    build:
+      context: ./web
+      dockerfile: WebDockerfile
+    image: xxtkidxx/cameraweb:latest
+    volumes:
+      - ./web:/var/www/html
+    command: sh -c "cron && php artisan schedule:work"
+    restart: always
+    networks:
+      - service-networks
+
+  # Redis Camera control 
+  cameracontrol:
+    container_name: cameracontrol
+    image: xxtkidxx/cameracontrol:lastest
+    build:
+      context: ./build/camera_control
+      dockerfile: CameraControlDockerfile
+    stdin_open: true
+    tty: true
+    restart: always
+    privileged: true
+    depends_on:
+      - cameraweb
+    volumes:
+      # - type: bind
+      #   source: /media/<user>
+      #   target: /media/<user>
+        # bind-propagation: shared
+      - ./build/camera_analysis/logs/alarm_images/:/app/logs/alarm_images
+      - ./build/camera_control:/app
+    # - ./frames/:/app/image
+    environment:
+      - WEB_SERVICE_URL=http://cameraweb:80
+      - NUM_WORKERS= 1 #Change Number of Worker Here
+    ports:
+      - "15440:5000"
+    # command: sh -c "flask --app app run --no-debugger --host 0.0.0.0"
+    command: gunicorn -w 2 -k gevent -b 0.0.0.0:5000 --timeout 120 --worker-connections 1000 --keep-alive 100 --log-level warning app:app
+    networks:
+      - service-networks
+
+  # Analysis
+  cameraanalysis:
+    container_name: cameraanalysis
+    image: xxtkidxx/cameraanalysis:latest
+    build:
+      context: ./build/camera_analysis
+      dockerfile: CameraAnalysisDockerfile
+    user: "0:0"
+    restart: always
+    stdin_open: true
+    tty: true
+    volumes:
+    # - ./frames/:/app/frames
+      - ./build/camera_analysis:/app
+      - ./AImodels/:/app/model
+    environment:
+      - CAMERA_SERVICE_URL=http://cameracontrol:5000
+      - WEB_SERVICE_URL=http://cameraweb:80
+      - PLC_IP=192.168.8.207
+    privileged: true
+    # depends_on:
+    #   - cameracontrol
+    #   - cameraweb
+    deploy:
+      resources:
+        reservations:
+          # memory: 16Gb
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python app.py
+    networks:
+      - service-networks
+networks:
+  service-networks:
+    driver: bridge

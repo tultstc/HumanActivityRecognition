@@ -1,0 +1,58 @@
+FROM php:8.2.1-apache
+
+# Set working directory
+
+COPY . /var/www/html/
+
+WORKDIR /var/www/html
+
+# Enable mod_rewrite
+RUN a2enmod rewrite
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libpq-dev \
+    zip \
+    python3-pip \
+    unzip \
+    cron \
+    && curl -sL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clear cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd
+
+# Install composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+RUN npm install -g npm@10.9.0
+
+# Apache virtual host configuration for local development
+COPY apache-local.conf /etc/apache2/sites-available/000-default.conf
+
+
+# RUN chgrp -R www-data /var/www/html
+# RUN chown -R www-data:www-data /var/www/html/storage
+RUN chmod -R 777 /var/www/html/storage
+
+# Enable PHP short tags for Laravel
+RUN echo "short_open_tag = On" > /usr/local/etc/php/conf.d/short-tags.ini
+
+# Add crontab file
+RUN echo "* * * * * cd /var/www/html && php artisan schedule:run >> /var/log/cron.log 2>&1" > /etc/cron.d/scheduler
+RUN chmod 0644 /etc/cron.d/scheduler
+RUN crontab /etc/cron.d/scheduler
+
+# Create log file
+RUN touch /var/log/cron.log
+
+# Start Apache service
+CMD ["apache2-foreground"]

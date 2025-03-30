@@ -1,0 +1,21 @@
+FROM pytorch/pytorch:latest
+RUN groupadd -g 1000 ubuntu && \
+    useradd -u 1000 -g 1000 -m ubuntu
+# RUN chown -R ubuntu:ubuntu /app/frames
+
+# Set working directory
+WORKDIR /app
+
+# Copy all files in the current directory to /app in the container
+COPY . /app
+# Install PyAudio dependencies
+RUN apt-get update \
+    && apt-get install -y libgl1-mesa-glx libglib2.0-0
+
+# Install necessary Python packages
+RUN pip install --no-cache-dir numpy
+# RUN pip install ultralytics==8.3.44 --no-deps 
+RUN pip install ultralytics --no-deps 
+RUN pip install scipy opencv-python-headless aiohttp matplotlib pandas datasets redis shapely python-snap7
+# RUN pip install --upgrade ultralytics
+USER ubuntu

@@ -1,0 +1,16 @@
+FROM python:3.10.15-slim
+# FROM pytorch/pytorch:latest
+# Copy application code to container
+COPY . /app
+
+# Set working directory
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y libgl1 -y libglib2.0-0
+
+# Upgrade pip and install necessary Python packages
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
+RUN pip install ultralytics==8.3.44 --no-deps 
+# startup script
+# CMD ["python", "/app/apptest.py"]

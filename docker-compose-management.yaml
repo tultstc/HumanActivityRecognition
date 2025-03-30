@@ -1,0 +1,36 @@
+services:
+  # redisinsight:
+  #   image: redislabs/redisinsight:1.12.0
+  #   restart: always
+  #   ports:
+  #     - "8001:8001"
+  #   networks:
+  #     - service-networks
+
+  # admin:
+  #   image: adminer
+  #   restart: always
+  #   ports:
+  #     - 8081:8080
+  #   networks:
+  #     - service-networks
+  
+  etc:
+    build:
+      context: ./etc/LSTM
+      dockerfile: EtcDockerfile
+    image: STCVideoAnalysis/etc:lastest
+    tty: true
+    # restart: always
+    ports:
+      - 8000:5000
+    volumes:
+      - ./etc/LSTM:/app
+    # command: sh -c "cd /app && python app.py"
+    command: sh -c "flask --app app run --no-debugger --host 0.0.0.0"
+    networks:
+      - service-networks
+
+networks:
+  service-networks:
+    driver: bridge

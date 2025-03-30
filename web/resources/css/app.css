@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[x-cloak] {
+    display: none;
+}
+
+.CodeMirror-scroll {
+    background-color: var(--cui-body-bg);
+    color: var(--cui-body-color);
+}
+
+.CodeMirror-linenumbers {
+    background-color: var(--cui-body-bg);
+    color: var(--cui-body-color);
+}
+
+.swal2-popup {
+    background-color: var(--cui-body-bg);
+    color: var(--cui-body-color);
+}
+
+.select2 {
+    height: 37.6px;
+    border: white !important;
+}
+
+.select2-selection {
+    border-color: #dbdfe6 !important;
+    border-radius: 6px !important;
+    height: 37.6px !important;
+}
+
+.select2-container {
+    width: 100% !important;
+}
+
+.select2-selection__rendered {
+    height: 37.6px !important;
+    padding-top: 3px;
+    border: white;
+}
+
+.select2-selection__clear {
+    padding-top: 3px;
+}
+
+.select2-selection__arrow {
+    margin-top: 3px;
+}
+
+.grid-stack-item-content {
+    background-color: white;
+}
+
+.grid-stack {
+    height: 70vh;
+}
+
+.dt-type-numeric {
+    text-align: left !important;
+}
+
+.dt-type-date {
+    text-align: left !important;
+}
+
+.dash-theme {
+    background-color: var(--cui-body-bg);
+    color: var(--cui-body-color);
+}
+
+.card-new {
+    opacity: 0;
+    transform: translateY(-10px);
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s ease;
+}
+
+.card-new-active {
+    opacity: 1;
+    animation: flashFade 3s ease;
+    transform: translateY(0);
+}
+@keyframes flashFade {
+    0% {
+        opacity: 0.4;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    75% {
+        opacity: 0.4;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
