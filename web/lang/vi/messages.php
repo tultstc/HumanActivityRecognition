@@ -70,4 +70,6 @@ return [
     'event_detail' => 'Chi tiết sự kiện',
     'description' => 'Mô tả',
     'event_description' => 'Phát hiện vật thể trong vùng hạn chế',
+    'labeling' => 'Gán nhãn',
+    'training' => 'Huấn luyện',
 ];

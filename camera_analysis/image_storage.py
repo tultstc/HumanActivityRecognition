@@ -7,6 +7,7 @@ import pickle
 class ImageStorage:
     def __init__(self, redis_instance):
         self.r = redis_instance
+        self.logger = logging.getLogger("main_logger")
 
     def save_image(self, key, image):
         """Save image to Redis。"""

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Area;
 use App\Models\Camera;
+use App\Models\Group;
 use App\Models\Layout;
 use App\Models\Notification;
 use Illuminate\Http\Request;
@@ -17,7 +18,8 @@ class DashboardController extends Controller
     public function index()
     {
         $all_cameras = Camera::orderBy('name')->get();
-        $cameras = Camera::where('status', '=', 1)->orderBy('name')->get();
+        $cameras = Camera::where('status', '=', 1)->with('groups')->orderBy('name')->get();
+        $groups = Group::all();
         $events = Notification::with('camera')->orderBy('start_error_time', 'desc')->limit(3)->get();
         $eventsWithPage = $events->map(function ($event) {
             $position = Notification::where('start_error_time', '>=', $event->start_error_time)
@@ -36,7 +38,8 @@ class DashboardController extends Controller
             [
                 'grid_rows' => 3,
                 'grid_columns' => 4,
-                'selected_camera_ids' => []
+                'selected_camera_ids' => [],
+                'selected_group_id' => null
             ]
         );
         foreach ($all_cameras as $camera) {
@@ -61,12 +64,17 @@ class DashboardController extends Controller
             'offline' => $inactive,
         ];
 
+        $selectedGroupName = $preferences->selected_group_id
+            ? Group::find($preferences->selected_group_id)->name
+            : "Analysis_Autoliv";
+
         return view('dashboard', [
             'stats' => $stats,
             'cameras' => $cameras,
+            'groups' => $groups,
             'events' => $events,
             'eventsWithPage' => $eventsWithPage,
-            'userPreferences' => $preferences
+            'userPreferences' => array_merge($preferences->toArray(), ['selected_group_name' => $selectedGroupName])
         ]);
     }
 
@@ -91,7 +99,8 @@ class DashboardController extends Controller
         $validated = $request->validate([
             'grid_rows' => 'required|integer|min:1',
             'grid_columns' => 'required|integer|min:1',
-            'selected_camera_ids' => 'nullable|array'
+            'selected_camera_ids' => 'nullable|array',
+            'selected_group_id' => 'nullable|string'
         ]);
 
         $preferences = Layout::updateOrCreate(
@@ -99,13 +108,18 @@ class DashboardController extends Controller
             [
                 'grid_rows' => $validated['grid_rows'],
                 'grid_columns' => $validated['grid_columns'],
-                'selected_camera_ids' => $validated['selected_camera_ids'] ?? []
+                'selected_camera_ids' => $validated['selected_camera_ids'] ?? [],
+                'selected_group_id' => $validated['selected_group_id'] ?? null
             ]
         );
 
+        $selectedGroupName = $preferences->selected_group_id
+            ? Group::find($preferences->selected_group_id)->name
+            : "Analysis_Autoliv";
+
         return response()->json([
             'message' => 'Preferences saved successfully',
-            'preferences' => $preferences
+            'preferences' => array_merge($preferences->toArray(), ['selected_group_name' => $selectedGroupName])
         ]);
     }
 

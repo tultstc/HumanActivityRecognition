@@ -1,0 +1,4 @@
+Sit,OK
+Listening Phone,NG
+Clapping,OK
+Waving Hand,OK

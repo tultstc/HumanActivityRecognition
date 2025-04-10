@@ -70,4 +70,6 @@ return [
     'event_detail' => 'Event Details',
     'description' => 'Description',
     'event_description' => 'Detect an object in restricted zone',
+    'labeling' => 'Label Image',
+    'training' => 'Train',
 ];

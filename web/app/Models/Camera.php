@@ -17,6 +17,11 @@ class Camera extends Model
 
     protected $fillable = ['id', 'name', 'stream_url', 'status', 'config', 'model_id'];
 
+    public function groups()
+    {
+        return $this->belongsToMany(Group::class, 'camera_group', 'camera_id', 'group_id');
+    }
+
     public function setConfigAttribute($value)
     {
         $this->attributes['config'] = is_array($value)

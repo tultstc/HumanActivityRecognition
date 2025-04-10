@@ -2,12 +2,8 @@
 
 namespace App\Livewire;
 
-use App\Models\AiModel;
 use App\Models\Camera;
 use App\Models\Group;
-use App\Models\Position;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
@@ -22,12 +18,14 @@ class CameraList extends Component
     public $search = '';
     #[Url()]
     public $sort = 'name-asc';
-
+    #[Url()]
+    public $group = '';
     public $page = 1;
 
     protected $queryString = [
         'search' => ['except' => ''],
         'sort' => ['except' => 'desc'],
+        'group' => ['group' => ''],
         'page' => ['except' => 1],
     ];
 
@@ -44,9 +42,14 @@ class CameraList extends Component
         $this->search = $search;
         $this->resetPage();
     }
+    public function updateGroup($group)
+    {
+        $this->group = $group;
+        $this->resetPage();
+    }
     public function clearFilters()
     {
-        $this->reset(['search', 'sort']);
+        $this->reset(['search', 'sort', 'group']);
         $this->resetPage();
     }
 
@@ -58,11 +61,22 @@ class CameraList extends Component
             ->when($this->search, function ($query) {
                 $query->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($this->search) . '%']);
             })
+            ->when($this->group, function ($query) {
+                $query->whereHas('groups', function ($q) {
+                    $q->where('id', $this->group);
+                });
+            })
             ->orderBy(
-                $this->sort === 'name-asc' || $this->sort === 'name-desc' ? 'name' : 'created_at',
+                $this->sort === 'name-asc' || $this->sort === 'name-desc' ? 'name' : 'updated_at',
                 $this->sort === 'name-asc' || $this->sort === 'asc' ? 'asc' : 'desc'
             )
             ->paginate(8);
+    }
+
+    #[Computed]
+    public function groups()
+    {
+        return Group::all();
     }
 
     public function render()

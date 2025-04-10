@@ -6,6 +6,11 @@
     display: none;
 }
 
+.bg-system {
+    background-color: var(--cui-body-bg);
+    color: var(--cui-body-color);
+}
+
 .CodeMirror-scroll {
     background-color: var(--cui-body-bg);
     color: var(--cui-body-color);
@@ -84,6 +89,12 @@
     animation: flashFade 3s ease;
     transform: translateY(0);
 }
+
+.fade-out {
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+}
+
 @keyframes flashFade {
     0% {
         opacity: 0.4;

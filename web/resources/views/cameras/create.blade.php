@@ -42,7 +42,7 @@
                                     Looks good!
                                 </div>
                             </div>
-                            <div class="col-span-7">
+                            <div class="col-span-5">
                                 <label for="name" class="form-label">{{ __('messages.name') }}</label>
                                 <input type="text" class="form-control" id="name" name="name"
                                     value="{{ old('name') }}" placeholder="MKK052 Pano 7000" required>
@@ -77,6 +77,15 @@
                                 <div class="invalid-feedback">
                                     Please select a valid status.
                                 </div>
+                            </div>
+                            <div class="col-span-2">
+                                <label for="groups" class="form-label">Select Group</label>
+                                <select name="groups[]" id="groups" class="form-control" multiple required>
+                                    @foreach ($groups as $group)
+                                        <option value="{{ $group->id }}">{{ $group->name }} (ID: {{ $group->id }})
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
                             <div class="col-span-12">
                                 <label for="stream_url" class="form-label">{{ __('messages.url') }}</label>

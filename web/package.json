@@ -58,6 +58,7 @@
         "simplebar": "^6.2.7",
         "stylelint": "^16.9.0",
         "stylelint-config-twbs-bootstrap": "^15.1.0",
-        "sync-directory": "^6.0.5"
+        "sync-directory": "^6.0.5",
+        "ws": "^8.18.0"
     }
 }

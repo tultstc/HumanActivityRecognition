@@ -13,6 +13,17 @@
         class="form-control">
 </div>
 
+<!-- Group Sort -->
+<div class="mb-6">
+    <label class="block text-sm font-medium text-gray-700 mb-2">{{ __('Group Sort') }}</label>
+    <select wire:model.live="group" class="form-control">
+        <option value="" selected disabled>Select a group</option>
+        @foreach ($this->groups as $group)
+            <option value="{{ $group->id }}">{{ $group->name }}</option>
+        @endforeach
+    </select>
+</div>
+
 <!-- Sort Option -->
 <div class="mb-6">
     <label class="block text-sm font-medium text-gray-700 mb-2">{{ __('messages.sort_by') }}</label>

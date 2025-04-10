@@ -17,6 +17,7 @@ return new class extends Migration
             $table->integer('grid_rows')->default(3);
             $table->integer('grid_columns')->default(4);
             $table->json('selected_camera_ids')->nullable();
+            $table->integer('selected_group_id')->nullable();
             $table->timestamps();
         });
     }

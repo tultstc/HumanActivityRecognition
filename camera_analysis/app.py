@@ -6,39 +6,66 @@ import os
 import cv2
 import redis
 import json
+import mmengine
+import numpy as np
+import torch
+import torch.nn as nn
+import os.path as osp
 
-from ultralytics import YOLO  # Import Ultralytics Package
-from ultralytics import RTDETR # Import Ultralytics Package
-from ultralytics import solutions  # Import Ultralytics Package
-# local kit
+from ultralytics import YOLO
 from ApiService import ApiService
-from PlcService import PlcService
 from image_storage import ImageStorage
 from logging_config import *
-from solution.analysis_model_zone import analysis_zone
-from solution.analysis_model_pose import analysis_pose
+from mmaction.apis import init_recognizer
+from mmengine.utils import track_iter_progress
+from mmengine.structures import InstanceData
+from mmdet.apis import init_detector
+from mmpose.apis import init_model
+from mmpose.structures import PoseDataSample
+from mmpose.visualization import PoseLocalVisualizer
+from mmpose.apis import MMPoseInferencer
+from typing import List, Optional, Tuple, Union
+from mmengine.dataset import Compose, pseudo_collate
+from mmaction.structures import ActionDataSample
+from mmengine.registry import init_default_scope
+
 class MainApp:
     def __init__(self):
-
-        configure_logging()  # Setup log
+        configure_logging()
         self.logger = logging.getLogger("main_logger")
+        self.file_logger = logging.getLogger("app_logger")
         self.logger.setLevel(logging.INFO)
-        self.lic_check = LicCheck()
+        self.lic_check = True
         self.api_service = ApiService(base_url=os.getenv("WEB_SERVICE_URL"))
-        self.plc_servive = PlcService(plc_ip=os.getenv("PLC_IP"))
         self.last_sent_timestamps = {}
-        self.SLEEP_INTERVAL = 0.1  # Set a reasonable sleep interval
+        self.SLEEP_INTERVAL = 0.1
         self.camera_frame_count = {}
-        self.camera_alarm = {}
+        self.last_label = None
+        self.pose_buffer = {}
+        self.window_size = 15
+        self.pose_config = 'demo/demo_configs/td-hm_hrnet-w32_8xb64-210e_coco-256x192_infer.py'
+        self.pose_checkpoint = 'demo/hrnet_w32_coco_256x192-c78dce93_20200708.pth'
+        self.det_config = 'demo/demo_configs/faster-rcnn_r50_fpn_2x_coco_infer.py'
+        self.det_checkpoint = 'demo/faster_rcnn_r50_fpn_2x_coco_bbox_mAP-0.384_20200504_210434-a5d8aa15.pth'
+        self.config = mmengine.Config.fromfile('configs/skeleton/posec3d/slowonly_r50_8xb16-u48-240e_ntu60-xsub-keypoint.py')
+        self.action_model = init_recognizer(self.config, 'slowonly_r50_8xb16-u48-240e_ntu60-xsub-keypoint/epoch_24.pth')
+        self.label_map = 'tools/data/kinetics/label_map_k400.txt'
+        # self.label_map = 'tools/data/skeleton/label_map_ntu60.txt'
+        self.pose_estimator = init_model(self.pose_config, self.pose_checkpoint, 'cuda:0')
+        self.detector = init_detector(config=self.det_config, checkpoint=self.det_checkpoint, device='cuda:0')
+        self.inferencer = MMPoseInferencer(pose2d='human', det_weights="demo/rtmdet_m_8xb32-100e_coco-obj365-person-235e8209.pth", pose2d_weights="demo/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.pth", device='cuda:0')
+        # self.inferencer = MMPoseInferencer(pose2d='human', device='cuda:0')
+        self.last_actions = {}
+        self.visualizer = PoseLocalVisualizer()
 
-
+        self.yolo_model = YOLO("yolo11l.pt")
+        
         self.redis_host = "redis"
         self.redis_port = 6379
         self.r = redis.Redis(host=self.redis_host, port=self.redis_port, db=0)
         self.image_storage = ImageStorage(self.r)
 
         self.init_dirs()
-        self.init_models()
 
     def init_dirs(self):
         start_time = time.monotonic()
@@ -53,215 +80,423 @@ class MainApp:
 
         self.logger.debug(f"Directories initialized in {time.monotonic() - start_time:.2f} seconds")
 
-    # TuanDA
-    def init_models(self):
-        start_time = time.monotonic()
-        # Load the model from database and initialize the annotator
-        self.models = {}  # Dictionary used to store models
-        # Get model list
-        check = True
-        while check:
-            self.model_list = self.api_service.get_model_list()
-            if not self.model_list:
-                self.logger.warning("No model for init. Check database again!")
-            else:
-                check = False
-        for model in self.model_list:
-            model_path = model.get("url")
-            model_id = model.get("id")
-            # Load model using ultralytics YOLO
-            match model_id: #Detect
-                case 1 | 6 | 7 | 8 | 9 | 10:
-                    self.models[model_id] = {
-                        'path':  YOLO(model_path),
-                        'config': model.get("config"),
-                    }                
-                    # zone = [(20,400), (600,400), (600,360), (400,300), (200,300), (20,360)]
-                    # zone = [(20,700), (1450,700), (1200,440), (120,440)]
-                    # self.models[model_id] = ZoneDetect(
-                    #     show=True,
-                    #     region=zone,
-                    #     model=model_path,
-                    #     classes=[0],
-                    #     verbose=False,
-                    # )
-                case 5:
-                    self.models[model_id] = {
-                        'path':  RTDETR(model_path),
-                        'config': model.get("config"),
-                    }                
-                case 2: #Pose
-                    self.models[model_id] = {
-                        'path':  YOLO(model_path),
-                        'config': model.get("config"),
-                    }
-                case 3:
-                    # line_points = [(750, 500),(1200, 500),(1200, 530),(750,530)]
-                    line_points = [(0, 330), (1700, 330)]
-                    # self.models[model_id] = {
-                    #     'path':  solutions.ObjectCounter(
-                    #     show=True,
-                    #     region=line_points,
-                    #     model=model_path,
-                    #     classes=[0],
-                    #     verbose=False,
-                    # ),
-                    #     'config': model.get("config"),
-                    # }
-                case 4:
-                    self.models[model_id] = {
-                        'path':  YOLO(model_path),
-                        'config': model.get("config"),
-                    }
-            self.logger.debug(f"Model {model_id} loaded from {model_path}")
-        self.logger.info(f"Check models initialized in {time.monotonic() - start_time:.2f} seconds")
 
     async def fetch_camera_status(self):
-        # start_time = time.monotonic()
         loop = asyncio.get_event_loop()
         status = await loop.run_in_executor(None, self.image_storage.fetch_camera_status)
-        # self.logger.debug(f"Snapshot for camera status fetched in {time.monotonic() - start_time:.2f} seconds")
         return status
 
     async def fetch_snapshot(self, camera_id):       
         """Get the latest image of the specified camera from Redis"""
-        # start_time = time.monotonic()
         redis_key = f"camera_{camera_id}_latest_frame"
         loop = asyncio.get_event_loop()
         image = await loop.run_in_executor(None, self.image_storage.fetch_image, redis_key)
-        # image = await self.image_storage.fetch_image(redis_key)
-        # self.logger.debug(f"Snapshot for camera {camera_id} fetched in {time.monotonic() - start_time:.2f} seconds")
         return image
 
     async def process_camera(self, camera_id, camera_info, images_batches):
         img = await self.fetch_snapshot(camera_id)
         if img is not None:
-            # self.logger.info(f"Image from camera {camera_id} ready for processing")
             model_id = camera_info.get("model_id")
-            if model_id in self.models:
-                # Add images and information to corresponding batches based on model type
-                if model_id not in images_batches: 
-                    images_batches[model_id] = {
-                        'images': [],
-                        'camera_info': []
-                    }
-                images_batches[model_id]['images'].append(img)
-                images_batches[model_id]['camera_info'].append((camera_id, camera_info))
-                #FPS calcule TuanDA
-                self.camera_frame_count[camera_id]['count'] += 1
-                current_time = time.monotonic()
-                elapsed = current_time - self.camera_frame_count[camera_id]['last_time']
-                if elapsed >= 10.0:
-                    fps = self.camera_frame_count[camera_id]['count'] / elapsed
-                    self.camera_frame_count[camera_id]['count'] = 0
-                    self.camera_frame_count[camera_id]['last_time'] = current_time
-                    self.logger.debug(f"Camera {camera_id} FPS: {fps}")
-            else:
-                self.logger.warning(f"No valid recognition model for camera {camera_id}")
+            if model_id not in images_batches: 
+                images_batches[model_id] = {
+                    'images': [],
+                    'camera_info': []
+                }
+            images_batches[model_id]['images'].append(img)
+            images_batches[model_id]['camera_info'].append((camera_id, camera_info))
+            self.camera_frame_count[camera_id]['count'] += 1
+            current_time = time.monotonic()
+            elapsed = current_time - self.camera_frame_count[
+                camera_id]['last_time']
+            if elapsed >= 10.0:
+                fps = self.camera_frame_count[camera_id]['count'] / elapsed
+                self.camera_frame_count[camera_id]['count'] = 0
+                self.camera_frame_count[camera_id]['last_time'] = current_time
+                self.logger.debug(f"Camera {camera_id} FPS: {fps}")
         else:
             self.logger.warning(f"No image fetched for camera {camera_id}")
 
+    def convert_inferencer_output_batch(self, result_dict, image_shape):
+        pose_data_sample = PoseDataSample()
+        
+        predictions = result_dict['predictions'][0] if result_dict['predictions'] else []
+        visualization = result_dict['visualization'][0] if result_dict['visualization'] else None
+        
+        if predictions:
+            keypoints = np.array([pred['keypoints'] for pred in predictions])
+            keypoint_scores = np.array([pred['keypoint_scores'] for pred in predictions])
+            
+            if 'bboxes' in predictions[0]:
+                bboxes = np.array([pred['bboxes'] for pred in predictions])
+            else:
+                bboxes = np.zeros((len(predictions), 4), dtype=np.float32)
+                for i, kpts in enumerate(keypoints):
+                    valid_kpts = kpts[keypoint_scores[i] > 0.3]
+                    if len(valid_kpts) > 0:
+                        x_min, y_min = np.min(valid_kpts, axis=0)
+                        x_max, y_max = np.max(valid_kpts, axis=0)
+                        
+                        width, height = x_max - x_min, y_max - y_min
+                        x_min = max(0, x_min - width * 0.1)
+                        y_min = max(0, y_min - height * 0.1)
+                        x_max = min(image_shape[1], x_max + width * 0.1)
+                        y_max = min(image_shape[0], y_max + height * 0.1)
+                        bboxes[i] = [x_min, y_min, x_max, y_max]
+            
+            if len(predictions) > 0 and 'bbox_scores' in predictions[0]:
+                bbox_scores = np.array([pred['bbox_scores'] for pred in predictions])
+            else:
+                bbox_scores = np.mean(keypoint_scores, axis=1)
+            
+            pred_instances_data = dict(
+                keypoints=keypoints,
+                keypoint_scores=keypoint_scores,
+                bboxes=bboxes,
+                bbox_scores=bbox_scores
+            )
+            
+            pose_data_sample.pred_instances = InstanceData(**pred_instances_data)
+            
+            if hasattr(self.pose_estimator, 'dataset_meta'):
+                pose_data_sample.dataset_meta = self.pose_estimator.dataset_meta
+            
+            pose_result = {
+                'keypoints': keypoints,
+                'keypoint_scores': keypoint_scores,
+                'bboxes': bboxes,
+                'bbox_scores': bbox_scores
+            }
+        else:
+            num_keypoints = self.pose_estimator.dataset_meta['num_keypoints']
+            pred_instances_data = dict(
+                keypoints=np.empty(shape=(0, num_keypoints, 2)),
+                keypoint_scores=np.empty(shape=(0, num_keypoints), dtype=np.float32),
+                bboxes=np.empty(shape=(0, 4), dtype=np.float32),
+                bbox_scores=np.empty(shape=(0), dtype=np.float32)
+            )
+            pose_data_sample.pred_instances = InstanceData(**pred_instances_data)
+            
+            if hasattr(self.pose_estimator, 'dataset_meta'):
+                pose_data_sample.dataset_meta = self.pose_estimator.dataset_meta
+            
+            pose_result = pred_instances_data
+        
+        return pose_data_sample, pose_result, visualization
+    
+    def inference_recognizer(self, model: nn.Module,
+                         video: Union[str, dict],
+                         test_pipeline: Optional[Compose] = None
+                         ) -> ActionDataSample:
+        if test_pipeline is None:
+            cfg = model.cfg
+            init_default_scope(cfg.get('default_scope', 'mmaction'))
+            test_pipeline_cfg = cfg.test_pipeline
+            test_pipeline = Compose(test_pipeline_cfg)
+
+        input_flag = None
+        if isinstance(video, dict):
+            input_flag = 'dict'
+        elif isinstance(video, str) and osp.exists(video):
+            if video.endswith('.npy'):
+                input_flag = 'audio'
+            else:
+                input_flag = 'video'
+        else:
+            raise RuntimeError(f'The type of argument `video` is not supported: '
+                            f'{type(video)}')
+
+        if input_flag == 'dict':
+            data = video
+        if input_flag == 'video':
+            data = dict(filename=video, label=-1, start_index=0, modality='RGB')
+        if input_flag == 'audio':
+            data = dict(
+                audio_path=video,
+                total_frames=len(np.load(video)),
+                start_index=0,
+                label=-1)
+
+        data = test_pipeline(data)
+        data = pseudo_collate([data])
+
+        # Forward the model
+        with torch.no_grad():
+            result = model.test_step(data)[0]
+
+        return result
+    
+    def inference_skeleton(self, model: nn.Module,
+                       pose_results: List[dict],
+                       img_shape: Tuple[int],
+                       test_pipeline: Optional[Compose] = None
+                       ) -> ActionDataSample:
+        if test_pipeline is None:
+            cfg = model.cfg
+            init_default_scope(cfg.get('default_scope', 'mmaction'))
+            test_pipeline_cfg = cfg.test_pipeline
+            test_pipeline = Compose(test_pipeline_cfg)
+        
+        h, w = img_shape
+        num_keypoint = pose_results[0]['keypoints'].shape[1]
+        num_frame = len(pose_results)
+        num_person = max([len(x['keypoints']) for x in pose_results])
+        fake_anno = dict(
+            frame_dict='',
+            label=-1,
+            img_shape=(h, w),
+            origin_shape=(h, w),
+            start_index=0,
+            modality='Pose',
+            total_frames=num_frame)
+        keypoint = np.zeros((num_frame, num_person, num_keypoint, 2),
+                            dtype=np.float16)
+        keypoint_score = np.zeros((num_frame, num_person, num_keypoint),
+                                dtype=np.float16)
+
+        for f_idx, frm_pose in enumerate(pose_results):
+            frm_num_persons = frm_pose['keypoints'].shape[0]
+            for p_idx in range(frm_num_persons):
+                keypoint[f_idx, p_idx] = frm_pose['keypoints'][p_idx]
+                keypoint_score[f_idx, p_idx] = frm_pose['keypoint_scores'][p_idx]
+
+        fake_anno['keypoint'] = keypoint.transpose((1, 0, 2, 3))
+        fake_anno['keypoint_score'] = keypoint_score.transpose((1, 0, 2))
+        return self.inference_recognizer(model, fake_anno, test_pipeline), pose_results[0]['keypoints'][0]
+    
+    def draw_action_label(self, image, action_name, confidence, type_show, position=(30, 30)):
+        if type_show == "action":
+            labeled_image = image.copy()
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            text = f"{action_name} ({confidence:.2f})"
+            
+            text_size = cv2.getTextSize(text, font, 0.7, 2)[0]
+            cv2.rectangle(
+                labeled_image, 
+                (position[0] - 5, position[1] - text_size[1] - 5),
+                (position[0] + text_size[0] + 5, position[1] + 5),
+                (0, 0, 0), 
+                -1
+            )
+            
+            cv2.putText(
+                labeled_image, 
+                text, 
+                position, 
+                font, 
+                0.7, 
+                (255, 255, 255), 
+                2
+            )
+        else:
+            labeled_image = image.copy()
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            text = "NG"
+            
+            text_size = cv2.getTextSize(text, font, 0.7, 2)[0]
+            cv2.rectangle(
+                labeled_image, 
+                (position[0] - 5, position[1] - text_size[1] - 5),
+                (position[0] + text_size[0] + 5, position[1] + 5),
+                (0, 0, 0), 
+                -1
+            )
+            
+            cv2.putText(
+                labeled_image, 
+                text, 
+                position, 
+                font, 
+                0.8, 
+                (0, 0, 255), 
+                2
+            )
+        
+        return labeled_image
+    
+    def detect_phone(self, image):
+        results = self.yolo_model(image, classes=41) # 67 for Cell Phone | 41 - for cup
+        phone_detections = []
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                confidence = box.conf[0].cpu().numpy()
+                center_x = int((x1 + x2) / 2)
+                center_y = int((y1 + y2) / 2)
+                
+                phone_detections.append({
+                    'bbox': [x1, y1, x2, y2],
+                    'confidence': confidence,
+                    'center': (center_x, center_y)
+                })
+                
+        return phone_detections
+    
+    def draw_phone_detections(self, image, phone_detections):
+        annotated_image = image.copy()
+        for detection in phone_detections:
+            x1, y1, x2, y2 = [int(coord) for coord in detection['bbox']]
+            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            center_x, center_y = detection['center']
+            cv2.circle(annotated_image, (center_x, center_y), 5, (0, 0, 255), -1)
+            text = f"Phone: ({center_x}, {center_y}) {detection['confidence']:.2f}"
+            cv2.putText(
+                annotated_image,
+                text,
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                2
+            )
+        return annotated_image, (center_x, center_y)
+
     def call_model_batch(self, model_id, batch_data):
         """Process a batch of images using the specified model"""
-        start_time = time.monotonic()
-
-        model = self.models[model_id]['path']
-        model_config = self.models[model_id]['config']
         images_batch = batch_data['images']
         camera_info_batch = batch_data['camera_info']
-        # TuanDA Chia loai model de xu ly model1 = Tracking, model2 = Detector,Model3 = Counter...
-        match model_id:
-            case 1 | 5 | 6 | 7 | 8 | 9 | 10: #Detect           
-                results, detection_flags = analysis_zone.process_model(self,batch_data,model,model_config)
-                for i, detections in enumerate(results):
-                    camera_id, camera_info = camera_info_batch[i]
-                    # annotated_image = detections.plot()
-                    annotated_image = detections.orig_img
-                    # Save images and send notifications
-                    self.save_and_notify(annotated_image, camera_info, detection_flags[i])
-            case 2: #Pose
-                results, detection_flags = analysis_pose.process_model(self,batch_data,model,model_config)
-                for i, detections in enumerate(results):
-                    camera_id, camera_info = camera_info_batch[i]
-                    # annotated_image = detections.plot()
-                    annotated_image = detections.orig_img
-                    # Save images and send notifications
-                    self.save_and_notify(annotated_image, camera_info, detection_flags[i])    
-            case 3: #count
-                annotated_image = model.count(images_batch[0])
-                camera_id, camera_info = camera_info_batch[0]             
-                # Save images and send notifications
-                self.save_and_notify(annotated_image, camera_info, False)  
-            case 4: #tracking
-                results = model.track(images_batch[0], conf=model_config.get("conf"), classes=model_config.get("label_conf"), verbose=False)
-                annotated_image = results[0].plot()
-                camera_id, camera_info = camera_info_batch[0]             
-                # Save images and send notifications
-                self.save_and_notify(annotated_image, camera_info, False)
-
-        # self.logger.info(f"Batch model {model_id} ({len(images_batch)} images) processing completed in {time.monotonic() - start_time:.2f} seconds")
-    
-    def save_and_notify( self, annotated_image, camera_info, detection_flag):
         
-        start_time = time.monotonic()
-        camera_id = camera_info.get("id")
-        redis_key = f"camera_{camera_id}_boxed_image"
-        self.image_storage.save_image(redis_key, annotated_image)
-        # self.image_storage.save_image_raw(redis_key, annotated_image)
-        # self.logger.debug(f"Camera {camera_id} save and notify completed in {time.monotonic() - start_time:.2f} seconds")
+        if model_id == 3:
+            start_batch_time = time.monotonic()
 
-        #Caculate Alarm
-        maxinframe =  2 if camera_info.get("config").get("maxinframe") is None else camera_info.get("config").get("maxinframe")
-        maxoutframe =  5 if camera_info.get("config").get("maxoutframe") is None else camera_info.get("config").get("maxoutframe")
-        maxsendframe =  10 if camera_info.get("config").get("maxsendframe") is None else camera_info.get("config").get("maxsendframe")
-        addresson = "V100.0" if camera_info.get("config").get("addresson") is None else camera_info.get("config").get("addresson")
-        addressoff = "V100.1" if camera_info.get("config").get("addressoff") is None else camera_info.get("config").get("addressoff")
-        self.camera_alarm[camera_id]['time'] = start_time
-        if detection_flag:
-            self.camera_alarm[camera_id]['inframe'] +=1
-            if self.camera_alarm[camera_id]['status'] == False and self.camera_alarm[camera_id]['inframe'] >= maxinframe:
-                #Set and send alarm here
-                self.camera_alarm[camera_id]['status'] = True
-                self.camera_alarm[camera_id]['outframe'] = 0
-                alarm_img_path = os.path.join(self.ALARM_SAVE_DIR, f"{camera_id}_{start_time}.jpg")
-                self.camera_alarm[camera_id]['url'] = alarm_img_path
-                self.camera_alarm[camera_id]['camera_id']=camera_id
-                cv2.imwrite(alarm_img_path, annotated_image)
-                self.logger.debug(f"[{camera_id}] Alarm image saved to {alarm_img_path} in {time.monotonic() - start_time:.2f} seconds")
-                #Send web
-                self.api_service.send_web_notify_message_v2(self.camera_alarm[camera_id])
-                #Send PLC
-                self.logger.info(f"[{camera_id}] Alarm PLC sent on 1st - {self.camera_alarm[camera_id]['inframe']}")
-                self.plc_servive.write_alarm_on(addresson)
-                              
-            elif self.camera_alarm[camera_id]['status'] and (self.camera_alarm[camera_id]['inframe'] >= maxinframe) and (self.camera_alarm[camera_id]['inframe'] % maxsendframe == 0):
-                ##Send PLC
-                self.logger.info(f"[{camera_id}] Alarm PLC sent on 2nd - {self.camera_alarm[camera_id]['inframe']}")
-                self.camera_alarm[camera_id]['outframe'] = 0
-                if self.camera_alarm[camera_id]['inframe'] > 10000:
-                    self.camera_alarm[camera_id]['inframe'] = maxinframe  
-                self.plc_servive.write_alarm_on(addresson)   
-        else:
-            self.camera_alarm[camera_id]['outframe'] += 1
-            if self.camera_alarm[camera_id]['status'] == True and self.camera_alarm[camera_id]['outframe'] >= maxoutframe:
-                #Send PLC
-                self.logger.info(f"[{camera_id}] Alarm PLC sent off - {self.camera_alarm[camera_id]['outframe']}")
-                self.plc_servive.write_alarm_off(addressoff) 
-                # Send web update
-                self.api_service.update_web_notify_message(self.camera_alarm[camera_id])
-                self.camera_alarm[camera_id]['status'] = False
-                self.camera_alarm[camera_id]['inframe'] = 0
-                self.camera_alarm[camera_id]['outframe'] = 0
-                self.camera_alarm[camera_id]['url'] = ""
-            else:
-                if self.camera_alarm[camera_id]['outframe'] > 5000:
-                    self.camera_alarm[camera_id]['outframe'] = 0  
+            infer_results = list(self.inferencer(images_batch, batch_size=3, bbox_thr=0.6))
+            # print('infer_results - bbox_thr=0.1', infer_results)
+
+            batch_time = time.monotonic() - start_batch_time
+            self.logger.debug(f"Batch inference time for {len(images_batch)} images: {batch_time:.5f} seconds")
+            print(f"Batch inference time for {len(images_batch)} images: {batch_time:.5f} seconds")
+
+            object_detects = self.yolo_model(images_batch, classes=41)
+
+            for i, (camera_id, _) in enumerate(camera_info_batch):
                 
-    async def main_loop(self):
+                image = images_batch[i]
+                cup_detect = object_detects[i]
+                if cup_detect.boxes.xyxy.nelement() > 0:  # Kiểm tra nếu tensor không rỗng (có phát hiện)
+                    first_box = cup_detect.boxes[0]  # Lấy phần tử đầu tiên
 
+                    x1, y1, x2, y2 = first_box.xyxy[0].cpu().numpy()
+                    center_x = int((x1 + x2) / 2)
+                    center_y = int((y1 + y2) / 2)
+                    center_point = (center_x, center_y)
+                else:
+                    print("Không phát hiện đối tượng nào.")
+
+                try:
+                    if i < len(infer_results):
+                        result_dict = infer_results[i]
+                        
+                        te=time.monotonic()
+                        pose_data_sample, pose_result, annotated_image = self.convert_inferencer_output_batch(
+                            result_dict, image.shape[:2]
+                        )
+
+                        # check_valid_person_detected = pose_result["bbox_scores"][0] > 0.4
+                        check_valid_person_detected = pose_result["bbox_scores"][0] > 0.4
+                        # print(f"Convert time - {time.monotonic()-te:5f} seconds")
+
+                        # Valided Person
+                        if check_valid_person_detected:
+                            # draw bouding box of object
+                            annotated_image = cup_detect.plot()
+
+                            if camera_id not in self.pose_buffer:
+                                self.pose_buffer[camera_id] = []
+                            
+                            self.pose_buffer[camera_id].append(pose_result)
+                            
+                            if len(self.pose_buffer[camera_id]) >= self.window_size:
+                                action_result, keypoint_data = self.inference_skeleton(
+                                    self.action_model, 
+                                    self.pose_buffer[camera_id], 
+                                    image.shape[:2]
+                                )
+                                action_label = action_result.pred_label.item()
+                                action_confidence = action_result.pred_score.max().item()
+                                print('action_label', action_label)
+
+                                # Listening Phone when pose is listening and the distance between phone to person is so close
+                                if action_label == 1 and cup_detect:
+                                    # Listen to the phone is NG action
+                                    center_point_coordinate = list(center_point)
+
+                                    nose_coordinate = keypoint_data[0]
+                                    left_eye_coordinate = keypoint_data[1]
+                                    right_eye_coordinate = keypoint_data[2]
+                                    left_ear_coordinate = keypoint_data[3]
+                                    right_ear_coordinate = keypoint_data[4]
+                                    
+                                    distance_to_nose = np.linalg.norm(np.array(center_point_coordinate) - np.array(nose_coordinate))
+                                    distance_to_left_eye = np.linalg.norm(np.array(center_point_coordinate) - np.array(left_eye_coordinate))
+                                    distance_to_right_eye = np.linalg.norm(np.array(center_point_coordinate) - np.array(right_eye_coordinate))
+                                    distance_to_left_ear = np.linalg.norm(np.array(center_point_coordinate) - np.array(left_ear_coordinate))
+                                    distance_to_right_ear = np.linalg.norm(np.array(center_point_coordinate) - np.array(right_ear_coordinate))
+                                    
+                                    if distance_to_nose < 200 or distance_to_left_eye < 200 or distance_to_right_eye < 200 or distance_to_left_ear < 200 or distance_to_right_ear < 200:
+                                        redis_key_boxed = f"camera_{camera_id}_boxed_image"
+                                        annotated_image = self.draw_action_label(annotated_image, "NG", 0, "other")
+                                        self.image_storage.save_image(redis_key_boxed, annotated_image)
+                                        print("Drawing NG Action Label")
+                                        with open(self.label_map, 'r') as f:
+                                            labels = [line.strip() for line in f]
+                                        action_name = labels[action_label] if action_label < len(labels) else f"Unknown-{action_label}"
+                                        print("Action Name - Label Name: ", action_name)
+                                        continue
+                                else:         
+                                    try:
+                                        with open(self.label_map, 'r') as f:
+                                            labels = [line.strip() for line in f]
+                                        action_name = labels[action_label] if action_label < len(labels) else f"Unknown-{action_label}"
+                                        print("Action Name: ", action_name)
+                                    except:
+                                        action_name = f"Action-{action_label}"
+                                    
+                                    if not hasattr(self, 'last_actions'):
+                                        self.last_actions = {}
+                                    
+                                    self.last_actions[camera_id] = {
+                                        'label': action_name,
+                                        'confidence': action_confidence
+                                    }
+                                    
+                                    self.logger.info(f"Camera {camera_id}: {action_name} (confidence: {action_confidence:.2f})")
+                                # self.pose_buffer[camera_id] = self.pose_buffer[camera_id][8:]
+                                self.pose_buffer[camera_id] = []
+                            else:
+                                action_name = self.last_actions.get(camera_id, {}).get('label', "No Action")
+                                action_confidence = self.last_actions.get(camera_id, {}).get('confidence', 0.0)
+                                print('action_name, action_confidence', action_name, action_confidence)
+                            
+                            self.visualizer.set_dataset_meta(self.pose_estimator.dataset_meta)
+                            self.visualizer.add_datasample(
+                                'result',
+                                annotated_image,
+                                data_sample=pose_data_sample,
+                                draw_gt=False,
+                                draw_bbox=True,
+                                draw_heatmap=False,
+                                show_kpt_idx=True,
+                                skeleton_style='mmpose',
+                                show=False
+                            )
+                            annotated_image = self.visualizer.get_image()
+                            annotated_image = self.draw_action_label(annotated_image, action_name, action_confidence, "action")
+                        else:
+                            annotated_image = image.copy()
+
+                        redis_key_boxed = f"camera_{camera_id}_boxed_image"
+                        self.image_storage.save_image(redis_key_boxed, annotated_image)
+            
+                    else:
+                        self.logger.warning(f"No inference results for camera {camera_id}")
+                        
+                except Exception as e:
+                    self.logger.error(f"Error processing camera {camera_id}: {str(e)}")
+                    
+            print("Time to excute: ", time.monotonic() - start_batch_time)    
+    
+    async def main_loop(self):
         check_time = time.monotonic()       
-        lic_time =  check_time
-        lic_info = True
         camera_status = await self.fetch_camera_status()
         if not camera_status:
             self.logger.warning("No camera status received")
@@ -271,56 +506,36 @@ class MainApp:
                 'count': 0,
                 'last_time': check_time,
             }
-            self.camera_alarm[int(camera_id)] = {
-                'time': check_time,
-                'status': False,
-                'inframe': 0,
-                'outframe': 0,
-                'url': ''
-            }
+            
         while True:
             start_time = time.monotonic()
-            # Initialize batch dictionary
             images_batches = {}
 
-            # Create processing tasks for each camera
             tasks = []
             for camera_id, status in camera_status.items():
                 if status["alive"] == "True" and status["last_image_timestamp"] != 'unknown' and status["camera_info"]:
                     camera_info = json.loads(status["camera_info"])
                     if camera_info:
                         tasks.append(asyncio.create_task(self.process_camera(int(camera_id), camera_info, images_batches)))
-            if tasks and lic_info:
-                # Perform processing tasks for all cameras asynchronously
+            if tasks:
                 await asyncio.gather(*tasks)
-                # self.logger.info(f"Processing camera is completed, taking {time.monotonic() - start_time:.2f} seconds")
-                # After all images are collected, batch inference is performed for each model type
-                # model_tasks = []
+                # print("Images batches: ", images_batches)
                 for model_id, batch_data in images_batches.items():
-                    # model_tasks.append(asyncio.create_task(self.call_model_batch(model_id, batch_data)))
                     self.call_model_batch(model_id, batch_data)
-                # await asyncio.gather(*model_tasks)
-            elif (not tasks) and lic_info:
+            elif (not tasks):
                 self.logger.warning("No processing camera")
 
-            # self.logger.info("Check camera status...")
             elapsed = start_time - check_time
-            if elapsed >= 5.0 and lic_info:
+            if elapsed >= 5.0:
                 self.logger.info(f"Processing Analysis is about {elapsed_time:.2f} seconds")
                 check_time = start_time
                 camera_status = await self.fetch_camera_status()
                 if not camera_status:
                     self.logger.warning("No camera status received")
                     await asyncio.sleep(self.SLEEP_INTERVAL)
-                    continue  
-            #lic check
-            elapsed = start_time - lic_time
-            if elapsed >= 60.0:
-                lic_time = start_time
-                lic_info = self.lic_check.check(False)['status']
-                if not lic_info: self.logger.error(f"Check system status: {lic_info}")         
-            # Dynamically adjust sleep time
+                    continue      
             elapsed_time = time.monotonic() - start_time
+            print("Time to excute main loop: ", elapsed_time)
             adjusted_sleep = max(0.001, self.SLEEP_INTERVAL - elapsed_time)
             await asyncio.sleep(adjusted_sleep)
 

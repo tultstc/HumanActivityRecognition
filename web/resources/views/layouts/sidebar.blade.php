@@ -27,16 +27,36 @@
                         <use xlink:href="node_modules/@coreui/icons/sprites/free.svg#cil-address-book"></use>
                     </svg>{{ __('messages.roles') }}</a></li>
         @endcan
+        <li class="nav-item"><a class="nav-link" href="{{ route('groups') }}">
+                <svg class="nav-icon">
+                    <use xlink:href="node_modules/@coreui/icons/sprites/free.svg#cil-group"></use>
+                </svg>Groups</a></li>
         @can('view camera')
             <li class="nav-item"><a class="nav-link" href="{{ route('cameras') }}">
                     <svg class="nav-icon">
                         <use xlink:href="node_modules/@coreui/icons/sprites/free.svg#cil-camera"></use>
                     </svg>Cameras</a></li>
         @endcan
-        {{-- <li class="nav-item"><a class="nav-link" href="{{ route('label.index') }}">
+        <li class="nav-item"><a class="nav-link" href="{{ route('recordings.index') }}">
+                <svg class="nav-icon">
+                    <use xlink:href="node_modules/@coreui/icons/sprites/free.svg#cil-airplay"></use>
+                </svg>Event Recordings</a></li>
+        <li class="nav-group"><a class="nav-link nav-group-toggle" href="#">
                 <svg class="nav-icon">
                     <use xlink:href="node_modules/@coreui/icons/sprites/free.svg#cil-settings"></use>
-                </svg>{{ __('messages.tools') }}</a></li> --}}
+                </svg> {{ __('messages.tools') }}</a>
+            <ul class="nav-group-items compact">
+                <li class="nav-item"><a class="nav-link" href="{{ route('rtsp.index') }}"><span class="nav-icon"><span
+                                class="nav-icon-bullet"></span></span>{{ __('Record Stream') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('label.video') }}"><span class="nav-icon"><span
+                                class="nav-icon-bullet"></span></span> {{ __('Label Video') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('train.index') }}"><span class="nav-icon"><span
+                                class="nav-icon-bullet"></span></span> {{ __('messages.training') }}</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ route('facial-collection.index') }}"><span
+                            class="nav-icon"><span class="nav-icon-bullet"></span></span>
+                        {{ __('Facial Collection') }}</a></li>
+            </ul>
+        </li>
         @can('view event')
             <li class="nav-item"><a class="nav-link" href="{{ route('events') }}">
                     <svg class="nav-icon">

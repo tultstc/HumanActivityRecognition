@@ -10,8 +10,8 @@
 
         @php
             $languages = [
-                'en' => ['flag' => 'flag-country-us', 'name' => 'English'],
-                'vi' => ['flag' => 'flag-country-vn', 'name' => 'Tiếng Việt'],
+                'en' => ['flag' => 'flag-country-us', 'name' => 'En'],
+                'vi' => ['flag' => 'flag-country-vn', 'name' => 'Vi'],
             ];
             $currentLang = app()->getLocale();
         @endphp

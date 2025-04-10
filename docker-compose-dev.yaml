@@ -264,11 +264,21 @@ services:
     networks:
       - service-networks
 
-  camerawebreverb:
-    container_name: camerawebreverb
+  websocket-relay:
+    image: xxtkidxx/websocket-relay:latest
     build:
       context: ./web
-      dockerfile: WebDockerfile
+      dockerfile: WebSocketDockerfile
+    container_name: websocket-relay
+    restart: always
+    ports:
+      - "9999:9999"
+      - "8088:8088"
+    networks:
+      - service-networks
+
+  camerawebreverb:
+    container_name: camerawebreverb
     image: xxtkidxx/cameraweb:latest
     volumes:
       - ./web:/var/www/html
@@ -281,9 +291,6 @@ services:
 
   camerawebworkers:
     container_name: camerawebworkers
-    build:
-      context: ./web
-      dockerfile: WebDockerfile
     image: xxtkidxx/cameraweb:latest
     volumes:
       - ./web:/var/www/html
@@ -294,9 +301,6 @@ services:
 
   camerawebscheduler:
     container_name: camerawebscheduler
-    build:
-      context: ./web
-      dockerfile: WebDockerfile
     image: xxtkidxx/cameraweb:latest
     volumes:
       - ./web:/var/www/html
@@ -337,39 +341,95 @@ services:
       - service-networks
 
   # Analysis
-  cameraanalysis:
-    container_name: cameraanalysis
+  # cameraanalysis:
+  #   container_name: cameraanalysis
+  #   build:
+  #     context: ./camera_analysis
+  #     dockerfile: CameraAnalysisDockerfile
+  #   image: xxtkidxx/cameraanalysis:latest
+  #   user: "0:0"
+  #   restart: always
+  #   stdin_open: true
+  #   tty: true
+  #   volumes:
+  #     # - ./frames/:/app/frames
+  #     - ./camera_analysis:/app
+  #     - ./AImodels/:/app/model
+  #   environment:
+  #     - CAMERA_SERVICE_URL=http://cameracontrol:5000
+  #     - WEB_SERVICE_URL=http://cameraweb:80
+  #     - PLC_IP=192.168.8.207
+  #   privileged: true
+  #   depends_on:
+  #     - cameracontrol
+  #     # - cameraweb
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         # memory: 16Gb
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   command: python app.py
+  #   networks:
+  #     - service-networks
+
+  posec3d:
     build:
       context: ./camera_analysis
-      dockerfile: CameraAnalysisDockerfile
-    image: xxtkidxx/cameraanalysis:latest
-    user: "0:0"
+      dockerfile: PoseC3DDockerfile
+    image: xxtkidxx/posec3d:latest
+    container_name: posec3d
     restart: always
-    stdin_open: true
-    tty: true
-    volumes:
-      # - ./frames/:/app/frames
-      - ./camera_analysis:/app
-      - ./AImodels/:/app/model
-    environment:
-      - CAMERA_SERVICE_URL=http://cameracontrol:5000
-      - WEB_SERVICE_URL=http://cameraweb:80
-      - PLC_IP=192.168.8.207
-    privileged: true
-    depends_on:
-      - cameracontrol
-      # - cameraweb
+    runtime: nvidia
+    command: python app.py
     deploy:
       resources:
         reservations:
-          # memory: 16Gb
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    command: python app.py
+    volumes:
+      - ./camera_analysis:/posec3d
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - WEB_SERVICE_URL=http://cameraweb:80
+    stdin_open: true
+    tty: true
+    shm_size: "16g"
     networks:
       - service-networks
+
+  posec3d_api:
+    image: xxtkidxx/posec3d:latest
+    container_name: posec3d_api
+    restart: always
+    ports:
+      - 8888:5000
+    command: sh -c "flask --app api run --no-debugger --host 0.0.0.0"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./camera_analysis:/posec3d
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - WEB_SERVICE_URL=http://cameraweb:80
+      - DATA_DIR=./
+    stdin_open: true
+    tty: true
+    shm_size: "16g"
+    networks:
+      - service-networks
+
 networks:
   service-networks:
     driver: bridge

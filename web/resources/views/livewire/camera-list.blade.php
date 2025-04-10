@@ -1,7 +1,7 @@
 <div class="px-4 h-full flex flex-col">
     <div class="grid grid-cols-12 gap-4 flex-1">
         <!-- Sidebar Filters - 3 cols -->
-        <div class="h-[420px] border col-span-2 rounded-md shadow p-4">
+        <div class="h-[500px] border col-span-2 rounded-md shadow p-4">
             <x-cameras.search :sort="$this->sort" :search="$this->search" />
         </div>
 

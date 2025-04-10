@@ -9,12 +9,12 @@ class Group extends Model
 {
     use HasFactory;
 
-    protected $table = 'nhom';
+    protected $table = 'groups';
 
-    protected $fillable = ['ten', 'mota'];
+    protected $fillable = ['name', 'description'];
 
     public function cameras()
     {
-        return $this->hasMany(Camera::class);
+        return $this->belongsToMany(Camera::class, 'camera_group', 'group_id', 'camera_id');
     }
 }

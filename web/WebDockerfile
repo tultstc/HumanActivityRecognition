@@ -1,13 +1,14 @@
 FROM php:8.2.1-apache
 
 # Set working directory
-
 COPY . /var/www/html/
-
 WORKDIR /var/www/html
 
 # Enable mod_rewrite
 RUN a2enmod rewrite
+
+# Add non-free repository
+RUN echo "deb http://deb.debian.org/debian bullseye non-free" >> /etc/apt/sources.list
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,9 +22,36 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     unzip \
     cron \
+    wget \
+    build-essential \
+    yasm \
+    pkg-config \
+    libx264-dev \
+    libx265-dev \
+    libvpx-dev \
+    libmp3lame-dev \
+    libopus-dev \
     && curl -sL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y nodejs
+
+# Install FFmpeg from source with limited codecs (excluding libfdk-aac)
+RUN cd /tmp && \
+    wget https://ffmpeg.org/releases/ffmpeg-6.1.1.tar.bz2 && \
+    tar xjf ffmpeg-6.1.1.tar.bz2 && \
+    cd ffmpeg-6.1.1 && \
+    ./configure \
+    --enable-gpl \
+    --enable-nonfree \
+    --enable-libx264 \
+    --enable-libx265 \
+    --enable-libvpx \
+    --enable-libmp3lame \
+    --enable-libopus && \
+    make -j$(nproc) && \
+    make install && \
+    # Cleanup FFmpeg source
+    cd /tmp && \
+    rm -rf ffmpeg-6.1.1 ffmpeg-6.1.1.tar.bz2
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -38,9 +66,6 @@ RUN npm install -g npm@10.9.0
 # Apache virtual host configuration for local development
 COPY apache-local.conf /etc/apache2/sites-available/000-default.conf
 
-
-# RUN chgrp -R www-data /var/www/html
-# RUN chown -R www-data:www-data /var/www/html/storage
 RUN chmod -R 777 /var/www/html/storage
 
 # Enable PHP short tags for Laravel
@@ -54,5 +79,12 @@ RUN crontab /etc/cron.d/scheduler
 # Create log file
 RUN touch /var/log/cron.log
 
-# Start Apache service
+# Update library cache
+RUN ldconfig
+
+COPY --chmod=0755 ./entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+RUN mkdir /var/www/html/storage/app/faces
+
 CMD ["apache2-foreground"]

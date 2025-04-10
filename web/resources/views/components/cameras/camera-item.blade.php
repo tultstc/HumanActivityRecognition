@@ -1,4 +1,14 @@
 @props(['camera'])
+<style>
+    .group-scroll::-webkit-scrollbar {
+        display: none;
+    }
+
+    .group-scroll {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+</style>
 <div class="border rounded-md shadow overflow-hidden" x-data="{
     snapshotUrl: '',
     init() {
@@ -23,8 +33,6 @@
 
     <!-- Camera Info -->
     <div class="p-3">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ $camera->ten }}</h3>
-
         <div class="space-y-2 text-sm text-gray-600">
             <div class="flex items-center">
                 <span class="font-medium mr-2">{{ __('messages.name') }}:</span>
@@ -52,6 +60,44 @@
                         <span
                             class="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-red-100 text-red-800">{{ __('messages.inactive') }}</span>
                 @endswitch
+            </div>
+            <div class="flex cursor-pointer">
+                <p class="font-medium mr-2 mb-0">Group:</p>
+                <div class="flex overflow-x-auto space-x-2 group-scroll" x-data="{
+                    isDown: false,
+                    startX: 0,
+                    scrollLeft: 0,
+                    init() {
+                        this.$el.addEventListener('mousedown', (e) => {
+                            this.isDown = true;
+                            this.startX = e.pageX - this.$el.offsetLeft;
+                            this.scrollLeft = this.$el.scrollLeft;
+                        });
+                
+                        this.$el.addEventListener('mouseleave', () => {
+                            this.isDown = false;
+                        });
+                
+                        this.$el.addEventListener('mouseup', () => {
+                            this.isDown = false;
+                        });
+                
+                        this.$el.addEventListener('mousemove', (e) => {
+                            if (!this.isDown) return;
+                            e.preventDefault();
+                            const x = e.pageX - this.$el.offsetLeft;
+                            const walk = (x - this.startX) * 2;
+                            this.$el.scrollLeft = this.scrollLeft - walk;
+                        });
+                    }
+                }">
+                    @foreach ($camera->groups as $group)
+                        <a href="{{ route('groups.edit', $group->id) }}"
+                            class="inline-flex no-underline rounded-full px-2 text-xs font-semibold leading-5 bg-blue-100 text-blue-800 mx-1 mb-0 whitespace-nowrap">
+                            {{ $group->name }}
+                        </a>
+                    @endforeach
+                </div>
             </div>
         </div>
 

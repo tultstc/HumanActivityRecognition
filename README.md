@@ -1,6 +1,6 @@
-# STC-VideoAnalysis
+# STC-VideoAnalysisHAR
 
-STC-VideoAnalysis (fork from [VisionFlow](https://github.com/dan246/VisionFlow)) is a backend application designed for image recognition and notification systems. This project utilizes the Flask framework and leverages PostgreSQL for data management. Redis is integrated to handle the processing and distribution of camera images. All environments can be configured and managed using Docker.
+STC-VideoAnalysisHAR (fork from [VisionFlow](https://github.com/dan246/VisionFlow) and combined with mmaction [MMAction](https://github.com/open-mmlab/mmaction2.git)) is a backend application designed for human action recognition systems. This project utilizes the Flask framework and leverages PostgreSQL for data management. Redis is integrated to handle the processing and distribution of camera images. All environments can be configured and managed using Docker.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ STC-VideoAnalysis (fork from [VisionFlow](https://github.com/dan246/VisionFlow))
 
 ## Project Introduction
 
-STC-VideoAnalysis is a backend application aimed at handling operations related to image recognition and notification systems. The application provides functionalities for user authentication, camera management, notification sending, as well as integration with LINE and email notifications.
+STC-VideoAnalysisHAR is a backend application aimed at human action recognition. The application provides functionalities for user authentication, camera management, collect data, label and training.
 
 ## Quick Start
 
@@ -40,59 +40,48 @@ Before you begin, ensure you have the following tools installed:
 
 ### Setup Steps
 
-0. **License setup for Hardlock key**
+<!-- 0. **License setup for Hardlock key**
 
    ```bash
    - Install usbipd-win_4.3.0.msi in etc folder
    - Install WSL-USB-5.5.0.msi in etc folder
    - Open WSL USB, add Harkey ID to AutoLoad WSL.The name similar is OEM USB DONGLE
-   ```
+   ``` -->
 
 1. **Clone the Project to Your Local Environment:**
 
    ```bash
-   git clone https://github.com/xxtkidxx/VideoAnalysis.git
-   cd VideoAnalysis
-   cd camera_analysis && pyarmor gen -O ../build/camera_analysis .  (All project similar)
+   git clone https://github.com/stcrepo/VideoAnalysisHAR.git
+   cd VideoAnalysisHAR
+   sudo apt-get update && sudo apt-get upgrate
+   sudo apt install unzip
+   cd etc/posec3d/slowonly_r50_8xb16-u48-240e_ntu60-xsub-keypoint
+   unzip epoch_24.zip
+
+   - download checkpoints
+   https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco-person/faster_rcnn_r50_fpn_1x_coco-person_20201216_175929-d022e227.pth
+
+   https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w32_coco_256x192-c78dce93_20200708.pth
+
+   http://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_2x_coco/faster_rcnn_r50_fpn_2x_coco_bbox_mAP-0.384_20200504_210434-a5d8aa15.pth
+
+   https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.pth
+
+   https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmdet_m_8xb32-100e_coco-obj365-person-235e8209.pth
+
+   - copy to etc/pose/demo
    ```
 
 2. **Start the Services Using Docker Compose:**
 
    ```bash
-   docker-compose -f docker-compose.yaml up -d
+   (Make sure to configure the .env file in cameraweb service before building image)
+   docker compose -f docker-compose-dev.yaml up -d --build
    ```
 
    This command will automatically download the required Docker images, install the necessary packages, and start the Flask application on `http://localhost:5000`.
 
-3. **Migrate the Database (Run during First Setup or After Model Updates):**
-   **Web module (New):**
-
-   ```bash
-       docker-compose exec -it cameraweb  bash
-       composer install
-       composer update
-       chmod -R 777 /var/www/html/storage
-       php artisan migrate
-       npm install (if error try to run 'npm config set strict-ssl false' and 'npm install --force --loglevel verbose' )
-       npm run build
-       mv node_modules public
-       # For Test
-       php artisan db:seed --class=UserRolePermissionSeeder
-       php artisan db:seed --class=ModelSeeder
-       php artisan db:seed --class=CameraSeeder
-       # For Production
-       php artisan db:seed --class=AllDataSeeder
-
-       # Running websocket
-       update REVERB_PORT=6001 REVERB_HOST="webreverb" VITE_REVERB_HOST="localhost" in .env file
-       rebuild docker-compose-web.yaml
-      
-       #Some guilde
-       docker-compose -f docker-compose.yaml up -d --build
-       docker-compose -f docker-compose.yaml up cameraanalysis -d --build
-   ```
-
-4. **Configure Redis and Multiple Worker Nodes:**
+3. **Configure Redis and Multiple Worker Nodes:**
 
    If you need to set up Redis with multiple worker nodes, change value on docker-compose.yaml:
 
@@ -102,7 +91,7 @@ Before you begin, ensure you have the following tools installed:
 
    This will start the Redis service along with multiple worker nodes to handle image recognition and camera allocation tasks.
 
-5. **Replace Models in `camera_analysis`:**
+4. **Replace Models in `camera_analysis`:**
 
    Replace the models with your own model URLs, ensuring the files are named `best.pt`. You can set multiple model URLs without worrying about `.pt` models being overwritten.
 
@@ -110,7 +99,7 @@ Before you begin, ensure you have the following tools installed:
 
 ### Image Processing
 
-STC-VideoAnalysis uses Redis to manage camera image data. Camera images are stored in Redis and distributed to different worker nodes for processing. Each image, after recognition, is stored as a separate Redis key for subsequent use.
+STC-VideoAnalysisHAR uses Redis to manage camera image data. Camera images are stored in Redis and distributed to different worker nodes for processing. Each image, after recognition, is stored as a separate Redis key for subsequent use.
 NOTE: Number of worker change from docker-compose.yaml and (docker-compose-redis.yaml or docker-compose-redis-gpu.yaml)
 
 1. **Image Storage and Retrieval:**
@@ -124,7 +113,7 @@ NOTE: Number of worker change from docker-compose.yaml and (docker-compose-redis
 
 ### Camera Allocation
 
-To efficiently manage image processing from multiple cameras, STC-VideoAnalysis configures multiple worker nodes. These nodes distribute the processing workload, enhancing system efficiency. Each worker extracts camera images from Redis for processing, ensuring system stability and scalability.
+To efficiently manage image processing from multiple cameras, STC-VideoAnalysisHAR configures multiple worker nodes. These nodes distribute the processing workload, enhancing system efficiency. Each worker extracts camera images from Redis for processing, ensuring system stability and scalability.
 
 ## API Documentation
 
@@ -253,7 +242,7 @@ To efficiently manage image processing from multiple cameras, STC-VideoAnalysis 
 
 ## Usage Examples
 
-Here are some examples of how to use the STC-VideoAnalysis API:
+Here are some examples of how to use the STC-VideoAnalysisHAR API:
 
 1. **Register a New User and Login**
 

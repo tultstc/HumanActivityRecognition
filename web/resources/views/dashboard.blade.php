@@ -77,8 +77,9 @@
             <div class="h-full grid grid-cols-12 flex-1 overflow-hidden border">
                 {{-- Camera Show --}}
                 <div class="col-span-10 h-full">
-                    <div id="cameraContainer" class="h-full overflow-hidden flex items-center justify-center">
+                    <div id="cameraContainer" class="h-full overflow-hidden flex items-center justify-center relative">
                         <img id="cameraFrame" src="/images/blank.png" class="w-full h-[81.5vh] object-contain"></img>
+                        <div id="faceDetectionContainer" class="absolute top-4 right-4 flex items-end gap-4"></div>
                     </div>
                 </div>
 
@@ -123,6 +124,15 @@
                 <!-- Grid Layout Selection -->
                 <div class="mb-4 rounded">
                     <h5 class="text-md font-semibold mb-3">{{ __('messages.grid_layout') }}</h5>
+                    <div class="mb-3">
+                        <label class="block mb-1">{{ __('Select Group') }}</label>
+                        <select class="form-control text-sm">
+                            <option value="" disabled selected>{{ __('Select a group') }}</option>
+                            @foreach ($groups as $group)
+                                <option value="{{ $group->id }}">{{ $group->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block mb-1">{{ __('messages.rows') }}</label>
@@ -152,7 +162,8 @@
                     </div>
                     <div id="cameraList" class="grid grid-cols-3">
                         @foreach ($cameras as $camera)
-                            <div class="camera-item flex items-center p-2 ">
+                            <div class="camera-item flex items-center p-2"
+                                data-group-id="{{ json_encode($camera->groups->pluck('id')->toArray()) }}">
                                 <input type="checkbox" class="camera-checkbox mr-3 cursor-pointer"
                                     data-camera-id="{{ $camera->id }}">
                                 <span class="mr-3"><i class="fa-solid fa-video"></i></span>
@@ -174,5 +185,6 @@
         </script>
         <script type="module" src="js/dashboard-event.js"></script>
         <script src="js/dashboard.js"></script>
+        <script src="js/following-faces.js"></script>
     @endsection
 </x-app-layout>

@@ -4,9 +4,15 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CameraController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EventController;
-use App\Http\Controllers\LableController;
+use App\Http\Controllers\FacialCollectionController;
+use App\Http\Controllers\GroupController;
+use App\Http\Controllers\LabelController;
+use App\Http\Controllers\LabelManagementController;
 use App\Http\Controllers\LanguageController;
+use App\Http\Controllers\RecordingsController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\RTSPController;
+use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\UserController;
 
 use Illuminate\Support\Facades\Route;
@@ -30,12 +36,31 @@ Route::middleware([
         return view('profile.authentication');
     })->name('profile.authentication');
     Route::get('change', [LanguageController::class, 'change'])->name('lang.change');
+    Route::get('/recordings', [RecordingsController::class, 'index'])->name('recordings.index');
+    Route::get('tools/facial-collection', [FacialCollectionController::class, 'index'])->name('facial-collection.index');
 
     Route::group(['middleware' => ['role:admin|normal']], function () {
         Route::get('events', [EventController::class, 'index'])->name('events');
         Route::get('events/data', [EventController::class, 'getEvents'])->name('events.data');
         Route::get('events/{eventId}', [EventController::class, 'getById'])->name('events.get.one');
         Route::get('/events/position/{id}', [EventController::class, 'getEventPosition']);
+        Route::get('tools/training', [TrainingController::class, 'index'])->name('train.index');
+        Route::get('label-management', [LabelManagementController::class, 'index'])->name('label-management');
+        Route::get('label-management/create', [LabelManagementController::class, 'create'])->name('label-management.create');
+        Route::post('label-management/store', [LabelManagementController::class, 'store'])->name('label-management.store');
+        Route::get('label-management/{labelId}/edit', [LabelManagementController::class, 'edit'])->name('label-management.edit');
+        Route::put('label-management/{labelId}', [LabelManagementController::class, 'update'])->name('label-management.update');
+        Route::delete('label-management/{labelId}/delete', [LabelManagementController::class, 'destroy'])->name('label-management.destroy');
+        Route::get('tools/rtsp/recording', [RTSPController::class, 'index'])->name('rtsp.index');
+        Route::post('tools/rtsp/start-record', [RTSPController::class, 'startRecord'])->name('rtsp.start-record');
+        Route::post('tools/rtsp/stop-record', action: [RTSPController::class, 'stopRecord'])->name('rtsp.stop-record');
+        Route::get('groups', [GroupController::class, 'index'])->name('groups');
+        Route::get('groups/create', [GroupController::class, 'create'])->name('groups.create');
+        Route::post('groups/store', [GroupController::class, 'store'])->name('groups.store');
+        Route::get('groups/{groupId}/edit', [GroupController::class, 'edit'])->name('groups.edit');
+        Route::put('groups/{groupId}', [GroupController::class, 'update'])->name('groups.update');
+        Route::delete('groups/{groupId}/delete', [GroupController::class, 'destroy'])->name('groups.destroy');
+        Route::get('groups/{groupId}/cameras', [GroupController::class, 'getCamerasInGroup'])->name('groups.cameras');
     });
 
 
@@ -61,6 +86,6 @@ Route::middleware([
         Route::put('events/{eventId}', [EventController::class, 'update'])->name('events.update');
         Route::delete('events/{eventId}/delete', [EventController::class, 'destroy']);
 
-        Route::get('label', [LableController::class, 'index'])->name('label.index');
+        Route::get('tools/label', [LabelController::class, 'labelVideo'])->name('label.video');
     });
 });

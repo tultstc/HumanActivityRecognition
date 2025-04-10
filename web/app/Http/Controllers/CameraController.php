@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AiModel;
 use App\Models\Area;
 use App\Models\Camera;
+use App\Models\Group;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -27,13 +28,13 @@ class CameraController extends Controller implements HasMiddleware
 
     public function index()
     {
-        $cameras = Camera::get();
+        $cameras = Camera::with('groups')->orderBy('name')->get();
         return view('cameras.index', compact('cameras'));
     }
 
     public function getAll()
     {
-        $cameras = Camera::with(['model:id,name,url'])->active()->get();
+        $cameras = Camera::with(['model:id,name,url', 'groups:id,name'])->active()->get();
         return response()->json($cameras, 200);
     }
 
@@ -46,8 +47,12 @@ class CameraController extends Controller implements HasMiddleware
     public function create()
     {
         $models = AiModel::all();
+        $groups = Group::all();
 
-        return view('cameras.create', ['models' => $models]);
+        return view('cameras.create', [
+            'models' => $models,
+            'groups' => $groups
+        ]);
     }
 
     public function store(Request $request)
@@ -59,6 +64,8 @@ class CameraController extends Controller implements HasMiddleware
             'stream_url' => 'required|string|max:255',
             'status' => 'required|in:0,1',
             'config' => 'required|string',
+            'groups' => 'nullable|array',
+            'groups.*' => 'exists:groups,id',
         ]);
 
         $configJson = $validatedData['config'];
@@ -71,7 +78,7 @@ class CameraController extends Controller implements HasMiddleware
                 ->withInput();
         }
 
-        Camera::create([
+        $camera = Camera::create([
             'id' => $validatedData['id'],
             'name' => $validatedData['name'],
             'model_id' => $validatedData['model_id'],
@@ -80,14 +87,19 @@ class CameraController extends Controller implements HasMiddleware
             'config' => json_encode($decodedConfig),
         ]);
 
+        if ($request->has('groups')) {
+            $camera->groups()->sync($request->groups);
+        }
+
         return redirect(route('cameras'))->with('status', 'Successfully created Camera!');
     }
 
     public function edit($cameraId)
     {
-        $camera = Camera::with('model')->findOrFail($cameraId);
+        $camera = Camera::with(['model', 'groups'])->findOrFail($cameraId);
         $models = AiModel::all();
-        return view('cameras.edit', ['camera' => $camera, 'models' => $models]);
+        $groups = Group::orderBy('name')->get();
+        return view('cameras.edit', ['camera' => $camera, 'models' => $models, 'groups' => $groups, 'selectedGroups' => $camera->groups->pluck('id')->toArray()]);
     }
 
     public function update(Request $request, $cameraId)
@@ -102,6 +114,8 @@ class CameraController extends Controller implements HasMiddleware
             'status' => 'in:0,1,2,3',
             'config' => 'string|required',
             'mask' => 'nullable|string',
+            'groups' => 'nullable|array',
+            'groups.*' => 'exists:groups,id'
         ]);
 
         $configJson = $validatedData['config'];
@@ -146,6 +160,13 @@ class CameraController extends Controller implements HasMiddleware
         }
 
         $camera->update($cameraData);
+
+        if ($request->has('groups')) {
+            $camera->groups()->sync($request->groups);
+        } else {
+            $camera->groups()->detach();
+        }
+
         $validatedData['status'] == 1 ? Redis::set(`camera_{$cameraId}_status`, 'False') : Redis::set(`camera_{$cameraId}_status`, 'False');
 
         return redirect(route('cameras'))->with('status', 'Successfully updated Camera!');
@@ -167,6 +188,7 @@ class CameraController extends Controller implements HasMiddleware
     {
         try {
             $camera = Camera::findOrFail($cameraId);
+            $camera->groups()->detach();
             $camera->delete();
 
             return response()->json([
